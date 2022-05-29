@@ -8,6 +8,29 @@ const CODEC = 'libx265';
 const AUDIO_CODEC = 'aac';
 const acceptedTypes = ['.mp4', '.mov', '.mk4', '.mpeg', '.mpg'];
 
+function help() {
+    console.log(`
+        recode Help Menu
+        ----------------
+
+        Re-encode video to a lower bitrate (H.265)
+
+        Required:
+
+        --file: File to encode (Only required if --folder isn't used)
+        --output: Filename to save encoded file (Only required if --folder isn't used)
+
+        Options:
+
+        --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
+        --folder: Folder of files to encode
+        --files: Add if encoding multiple files
+        --help: Print help menu
+        --match: Only encode files starting with this. (Only used if --folder is used)
+        --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
+    `)
+}
+
 async function main() {
     if (args.help || Object.values(args).length <= 1) return help();
 
@@ -31,6 +54,7 @@ async function main() {
         let i = 0;
 
         if (amount == 1 && args.file) {
+            console.log(`processing ${args.file}`);
             await run(args.file, args.output);
             console.log('Finished Encoding');
             return;
@@ -39,20 +63,24 @@ async function main() {
         const isFolder = args.folder ? true : false;
 
         if (isFolder) {
-            for await (const file of Deno.readDir(args.folder)) {
+            console.log('Running on Folder')
+            for await (const file of Deno.readDir(resolve(Deno.cwd(), args.folder))) {
                 if (file.isFile && acceptedTypes.includes(extname(file.name)) && (args.match ? file.name.startsWith(args.match) : true)) {
                     const { name, ext } = pathParse(file.name);
+                    console.log(`processing ${name}${ext}`);
                     await run(resolve(Deno.cwd(), args.folder, file.name), resolve(Deno.cwd(), args.folder, `${name}-recode${ext}`));
                 }
             }
         } else {
             for await (const file of args.file) {
                 const { name, ext } = pathParse(file);
+                console.log(`processing ${name}${ext}`);
                 await run(resolve(Deno.cwd(), file), resolve(Deno.cwd(), (args.output[i] || `${name}-recode${ext}`)));
                 i++;
             }
         }
     } else {
+        console.log(`processing ${args.file}`);
         await run(args.file, args.output);
     }
 
@@ -62,29 +90,6 @@ async function main() {
     } catch (e) {}
 
     console.log('Finished Encoding');
-}
-
-function help() {
-    console.log(`
-        recode Help Menu
-        ----------------
-
-        Re-encode video to a lower bitrate (H.265)
-
-        Required:
-
-        --file: File to encode (Only required if --folder isn't used)
-        --output: Filename to save encoded file (Only required if --folder isn't used)
-
-        Options:
-
-        --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
-        --folder: Folder of files to encode
-        --files: Add if encoding multiple files
-        --help: Print help menu
-        --match: Only encode files starting with this. (Only used if --folder is used)
-        --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
-    `)
 }
 
 async function run(input: string, output: string) {
