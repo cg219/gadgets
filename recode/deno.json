@@ -1,0 +1,9 @@
+{
+    "tasks": {
+        "build": "deno compile --allow-read --allow-run --allow-write --output bin/recode recode.ts",
+        "build:arm": "deno compile --allow-read --allow-run --allow-write --target aarch64-apple-darwin --output bin/recode recode.ts",
+        "build:mac": "deno compile --allow-read --allow-run --allow-write --target x86_64-apple-darwin --output bin/recode recode.ts",
+        "build:linux": "deno compile --allow-read --allow-run --allow-write --target x86_64-unknown-linux-gnu --output bin/recode recode.ts",
+        "build:win": "deno compile --allow-read --allow-run --allow-write --target x86_64-pc-windows-msvc --output bin/recode recode.ts",
+    }
+}

@@ -1,0 +1,9 @@
+{
+    "tasks": {
+        "build": "deno compile --allow-read --allow-run --output bin/merge merge.ts",
+        "build:arm": "deno compile --allow-read --allow-run --target aarch64-apple-darwin --output bin/merge merge.ts",
+        "build:mac": "deno compile --allow-read --allow-run --target x86_64-apple-darwin --output bin/merge merge.ts",
+        "build:linux": "deno compile --allow-read --allow-run --target x86_64-unknown-linux-gnu --output bin/merge merge.ts",
+        "build:win": "deno compile --allow-read --allow-run --target x86_64-pc-windows-msvc --output bin/merge merge.ts",
+    }
+}
