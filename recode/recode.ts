@@ -1,12 +1,24 @@
-import { parse } from 'https://deno.land/std@0.140.0/flags/mod.ts';
-import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.140.0/path/mod.ts';
+import { parse } from 'https://deno.land/std@0.141.0/flags/mod.ts';
+import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.141.0/path/mod.ts';
 
-const args = parse(Deno.args);
+const args = parse(Deno.args, {
+    collect: ['file'],
+    string: ['abr', 'vbr', 'match', 'folder'],
+    alias: {
+        'f': 'file',
+        'o': 'output',
+        'a': 'abr',
+        'd': 'folder',
+        'h': 'help',
+        'm': 'match',
+        'v': 'vbr'
+    }
+});
 const VIDEO_BITRATE = '1400k';
 const AUDIO_BITRATE = '128k';
 const CODEC = 'libx265';
 const AUDIO_CODEC = 'aac';
-const acceptedTypes = ['.mp4', '.mov', '.mk4', '.mpeg', '.mpg'];
+const acceptedTypes = ['.mp4', '.mov', '.mkv', '.mpeg', '.mpg'];
 
 function help() {
     console.log(`
@@ -17,21 +29,35 @@ function help() {
 
         Required:
 
-        --file: File to encode (Only required if --folder isn't used)
-        --output: Filename to save encoded file (Only required if --folder isn't used)
+        -f --file: File to encode (Only required if --folder isn't used)
+        -o --output: Filename to save encoded file (Only required if --folder isn't used)
 
         Options:
 
-        --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
-        --folder: Folder of files to encode
-        --files: Add if encoding multiple files
-        --help: Print help menu
-        --match: Only encode files starting with this. (Only used if --folder is used)
-        --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
+        -a --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
+        -d --folder: Folder of files to encode
+        -h --help: Print help menu
+        -m --match: Only encode files starting with this. (Only used if --folder is used)
+        -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
     `)
 }
 
+async function createWorker(input: string, output: string) {
+    const thread = new URL('run.ts', Deno.mainModule).href;
+    const worker = new Worker(thread, { type: 'module' });
+    const passFile = `${pathParse(input).name}.log`;
+
+    return new Promise((resolve) => {
+        worker.postMessage({ input, output, abr: args.abr || AUDIO_BITRATE, vbr: args.vbr || VIDEO_BITRATE, codec: CODEC, passFile });
+        worker.addEventListener('message', (evt) => {
+            resolve(true);
+        })
+    })
+}
+
 async function main() {
+    const queue = [];
+
     if (args.help || Object.values(args).length <= 1) return help();
 
     if (!args.file && !args.folder) {
@@ -49,45 +75,33 @@ async function main() {
         return;
     }
 
-    if (args.files) {
-        const amount = Array.isArray(args.file) ? args.file.length : 1;
-        let i = 0;
+    const isFolder = args.folder ? true : false;
+    let i = 0;
 
-        if (amount == 1 && args.file) {
-            console.log(`processing ${args.file}`);
-            await run(args.file, args.output);
-            console.log('Finished Encoding');
-            return;
-        }
+    if (isFolder) {
+        console.log('Running on Folder')
+        for await (const file of Deno.readDir(resolve(Deno.cwd(), args.folder))) {
+            if (file.isFile && acceptedTypes.includes(extname(file.name)) && (args.match ? file.name.startsWith(args.match) : true)) {
+                const { name, ext } = pathParse(file.name);
+                const input = resolve(Deno.cwd(), args.folder, file.name);
+                const output = resolve(Deno.cwd(), args.folder, `${name}-recode${ext}`);
 
-        const isFolder = args.folder ? true : false;
-
-        if (isFolder) {
-            console.log('Running on Folder')
-            for await (const file of Deno.readDir(resolve(Deno.cwd(), args.folder))) {
-                if (file.isFile && acceptedTypes.includes(extname(file.name)) && (args.match ? file.name.startsWith(args.match) : true)) {
-                    const { name, ext } = pathParse(file.name);
-                    console.log(`processing ${name}${ext}`);
-                    await run(resolve(Deno.cwd(), args.folder, file.name), resolve(Deno.cwd(), args.folder, `${name}-recode${ext}`));
-                }
-            }
-        } else {
-            for await (const file of args.file) {
-                const { name, ext } = pathParse(file);
                 console.log(`processing ${name}${ext}`);
-                await run(resolve(Deno.cwd(), file), resolve(Deno.cwd(), (args.output[i] || `${name}-recode${ext}`)));
-                i++;
+                queue.push(createWorker(input, output));
             }
         }
     } else {
-        console.log(`processing ${args.file}`);
-        await run(args.file, args.output);
+        for await (const file of args.file) {
+            const { name, ext } = pathParse(file);
+            const input = resolve(Deno.cwd(), file);
+            const output = resolve(Deno.cwd(), (args.output[i] || `${name}-recode${ext}`));
+            console.log(`processing ${name}${ext}`);
+            queue.push(createWorker(input, output));
+            i++;
+        }
     }
 
-    try {
-        await Deno.remove(resolve(Deno.cwd(), 'x265_2pass.log'))
-        await Deno.remove(resolve(Deno.cwd(), 'x265_2pass.log.cutree'))
-    } catch (e) {}
+    await Promise.all(queue);
 
     console.log('Finished Encoding');
 }
