@@ -1,6 +1,16 @@
-self.addEventListener('message', async function (evt: MessageEvent) {
-    const { input, output, abr, vbr, codec, passFile } = evt.data;
+import { extname } from 'https://deno.land/std@0.141.0/path/mod.ts';
 
+interface RunnerOptions {
+    input: string
+    output: string
+    abr: string
+    vbr: string
+    codec: string
+    passFile: string
+    threads: string
+}
+
+async function run({ input, output, abr, vbr, codec, passFile, threads }: RunnerOptions) {
     const firstPass = [];
     const secondPass = [];
 
@@ -17,7 +27,7 @@ self.addEventListener('message', async function (evt: MessageEvent) {
     firstPass.push('-x265-params');
     firstPass.push(`stats=${passFile}`);
     firstPass.push('-threads');
-    firstPass.push(1)
+    firstPass.push(threads);
     firstPass.push('-an');
     firstPass.push('-f');
     firstPass.push('null');
@@ -39,7 +49,7 @@ self.addEventListener('message', async function (evt: MessageEvent) {
     secondPass.push('-b:a');
     secondPass.push(abr);
     secondPass.push('-threads');
-    secondPass.push(1)
+    secondPass.push(threads)
     secondPass.push(output);
 
     const fpid = Deno.run({ cmd: firstPass });
@@ -52,7 +62,6 @@ self.addEventListener('message', async function (evt: MessageEvent) {
 
     const spid = Deno.run({ cmd: secondPass });
     await spid.status();
+}
 
-    self.postMessage(true);
-    self.close();
-})
+export { run };

@@ -11,13 +11,15 @@ const args = parse(Deno.args, {
         'd': 'folder',
         'h': 'help',
         'm': 'match',
-        'v': 'vbr'
+        'v': 'vbr',
+        't': 'threads'
     }
 });
 const VIDEO_BITRATE = '1400k';
 const AUDIO_BITRATE = '128k';
 const CODEC = 'libx265';
 const AUDIO_CODEC = 'aac';
+const THREADS = '4';
 const acceptedTypes = ['.mp4', '.mov', '.mkv', '.mpeg', '.mpg'];
 
 function help() {
@@ -38,17 +40,19 @@ function help() {
         -d --folder: Folder of files to encode
         -h --help: Print help menu
         -m --match: Only encode files starting with this. (Only used if --folder is used)
+        -t --threads: Number of threads to use to per video. Defaults to "${THREADS}"
         -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
     `)
 }
 
 async function createWorker(input: string, output: string) {
-    const thread = new URL('run.ts', Deno.mainModule).href;
+    const thread = new URL('thread.ts', import.meta.url).href;
+    console.log(thread);
     const worker = new Worker(thread, { type: 'module' });
     const passFile = `${pathParse(input).name}.log`;
 
     return new Promise((resolve) => {
-        worker.postMessage({ input, output, abr: args.abr || AUDIO_BITRATE, vbr: args.vbr || VIDEO_BITRATE, codec: CODEC, passFile });
+        worker.postMessage({ input, output, abr: args.abr || AUDIO_BITRATE, vbr: args.vbr || VIDEO_BITRATE, codec: CODEC, passFile, threads: args.threads || THREADS });
         worker.addEventListener('message', (evt) => {
             resolve(true);
         })
@@ -86,6 +90,7 @@ async function main() {
                 const input = resolve(Deno.cwd(), args.folder, file.name);
                 const output = resolve(Deno.cwd(), args.folder, `${name}-recode${ext}`);
 
+                console.log(typeof input);
                 console.log(`processing ${name}${ext}`);
                 queue.push(createWorker(input, output));
             }
@@ -104,52 +109,6 @@ async function main() {
     await Promise.all(queue);
 
     console.log('Finished Encoding');
-}
-
-async function run(input: string, output: string) {
-    const firstPass = [];
-    const secondPass = [];
-
-    firstPass.push('ffmpeg');
-    firstPass.push('-y');
-    firstPass.push('-i');
-    firstPass.push(input);
-    firstPass.push('-c:v');
-    firstPass.push(CODEC);
-    firstPass.push('-b:v');
-    firstPass.push(args.vbr || VIDEO_BITRATE);
-    firstPass.push('-x265-params');
-    firstPass.push('pass=1');
-    firstPass.push('-an');
-    firstPass.push('-f');
-    firstPass.push('null');
-    firstPass.push('/dev/null/');
-
-    secondPass.push('ffmpeg');
-    secondPass.push('-i');
-    secondPass.push(input);
-    secondPass.push('-c:v');
-    secondPass.push(CODEC);
-    secondPass.push('-b:v');
-    secondPass.push(args.vbr || VIDEO_BITRATE);
-    secondPass.push('-x265-params');
-    secondPass.push('pass=2');
-    secondPass.push('-c:a');
-    secondPass.push('aac');
-    secondPass.push('-b:a');
-    secondPass.push(args.abr || AUDIO_BITRATE);
-    secondPass.push(output);
-
-    const fpid = Deno.run({ cmd: firstPass });
-    const fpstatus = await fpid.status();
-
-    if (!fpstatus.success) {
-        console.log('Error during First Pass');
-        return;
-    }
-
-    const spid = Deno.run({ cmd: secondPass });
-    await spid.status();
 }
 
 await main();
