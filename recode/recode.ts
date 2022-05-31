@@ -2,13 +2,13 @@ import { parse } from 'https://deno.land/std@0.141.0/flags/mod.ts';
 import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.141.0/path/mod.ts';
 
 const args = parse(Deno.args, {
-    collect: ['file'],
-    string: ['abr', 'vbr', 'match', 'folder'],
+    collect: ['file', 'output'],
+    string: ['abr', 'vbr', 'match', 'directory'],
     alias: {
         'f': 'file',
         'o': 'output',
         'a': 'abr',
-        'd': 'folder',
+        'd': 'directory',
         'h': 'help',
         'm': 'match',
         'v': 'vbr',
@@ -31,15 +31,15 @@ function help() {
 
         Required:
 
-        -f --file: File to encode (Only required if --folder isn't used)
-        -o --output: Filename to save encoded file (Only required if --folder isn't used)
+        -f --file: File to encode (Only required if --directory isn't used)
+        -o --output: Filename to save encoded file (Only required if --directory isn't used)
 
         Options:
 
         -a --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
-        -d --folder: Folder of files to encode
+        -d --directory: Directory of files to encode
         -h --help: Print help menu
-        -m --match: Only encode files starting with this. (Only used if --folder is used)
+        -m --match: Only encode files starting with this. (Only used if --directory is used)
         -t --threads: Number of threads to use to per video. Defaults to "${THREADS}"
         -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
     `)
@@ -64,31 +64,31 @@ async function main() {
 
     if (args.help || Object.values(args).length <= 1) return help();
 
-    if (!args.file && !args.folder) {
-        console.log('Missing file or folder to re-encode');
+    if (!args.file && !args.directory) {
+        console.log('Missing file or directory to re-encode');
         return;
     }
 
-    if (!args.output && !args.folder) {
+    if (!args.output && !args.directory) {
         console.log('Missing output file');
         return;
     }
 
-    if (args.file && args.folder) {
-        console.log(`--file and --folder are both set. Choose only one.`);
+    if (args.file && args.directory) {
+        console.log(`--file and --directory are both set. Choose only one.`);
         return;
     }
 
-    const isFolder = args.folder ? true : false;
+    const isDirectory = args.directory ? true : false;
     let i = 0;
 
-    if (isFolder) {
+    if (isDirectory) {
         console.log('Running on Folder')
-        for await (const file of Deno.readDir(resolve(Deno.cwd(), args.folder))) {
+        for await (const file of Deno.readDir(resolve(Deno.cwd(), args.directory))) {
             if (file.isFile && acceptedTypes.includes(extname(file.name)) && (args.match ? file.name.startsWith(args.match) : true)) {
                 const { name, ext } = pathParse(file.name);
-                const input = resolve(Deno.cwd(), args.folder, file.name);
-                const output = resolve(Deno.cwd(), args.folder, `${name}-recode${ext}`);
+                const input = resolve(Deno.cwd(), args.directory, file.name);
+                const output = resolve(Deno.cwd(), args.directory, `${name}-recode${ext}`);
 
                 console.log(typeof input);
                 console.log(`processing ${name}${ext}`);
