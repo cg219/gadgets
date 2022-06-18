@@ -48,6 +48,8 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     secondPass.push('aac');
     secondPass.push('-b:a');
     secondPass.push(abr);
+    secondPass.push('-c:s');
+    secondPass.push('copy');
     secondPass.push('-threads');
     secondPass.push(threads)
     secondPass.push(output);
