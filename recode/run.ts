@@ -36,6 +36,8 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     secondPass.push('ffmpeg');
     secondPass.push('-i');
     secondPass.push(input);
+    secondPass.push('-map');
+    secondPass.push('0');
     secondPass.push('-c:v');
     secondPass.push(codec);
     secondPass.push('-b:v');
