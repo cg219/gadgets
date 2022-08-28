@@ -103,7 +103,7 @@ async function main() {
                 if (!args.seq) {
                     queue.push(createWorker(input, output));
                 } else {
-                    await createWorker(input, output);
+                    await createWorker(input, output, args.file.length);
                 }
             }
         }
@@ -116,7 +116,7 @@ async function main() {
             if (!args.seq) {
                 queue.push(createWorker(input, output));
             } else {
-                await createWorker(input, output);
+                await createWorker(input, output, args.file.length);
             }
             i++;
         }

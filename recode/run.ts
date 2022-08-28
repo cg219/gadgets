@@ -1,4 +1,4 @@
-import { extname } from 'https://deno.land/std@0.141.0/path/mod.ts';
+import { extname } from 'https://deno.land/std@0.153.0/path/mod.ts';
 
 interface RunnerOptions {
     input: string
