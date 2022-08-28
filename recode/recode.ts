@@ -1,9 +1,20 @@
-import { parse } from 'https://deno.land/std@0.141.0/flags/mod.ts';
-import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.141.0/path/mod.ts';
+import { parse } from 'https://deno.land/std@0.153.0/flags/mod.ts';
+import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.153.0/path/mod.ts';
+
+const THREADS = '4';
+const VIDEO_BITRATE = '1400k';
+const AUDIO_BITRATE = '128k';
 
 const args = parse(Deno.args, {
     collect: ['file', 'output'],
     string: ['abr', 'vbr', 'match', 'directory'],
+    boolean: ['seq'],
+    default: {
+        'q': false,
+        't': THREADS,
+        'a': AUDIO_BITRATE,
+        'v': VIDEO_BITRATE
+    },
     alias: {
         'f': 'file',
         'o': 'output',
@@ -12,14 +23,12 @@ const args = parse(Deno.args, {
         'h': 'help',
         'm': 'match',
         'v': 'vbr',
-        't': 'threads'
+        't': 'threads',
+        'q': 'seq'
     }
 });
-const VIDEO_BITRATE = '1400k';
-const AUDIO_BITRATE = '128k';
 const CODEC = 'libx265';
 const AUDIO_CODEC = 'aac';
-const THREADS = '4';
 const acceptedTypes = ['.mp4', '.mov', '.mkv', '.mpeg', '.mpg'];
 
 function help() {
@@ -42,20 +51,19 @@ function help() {
         -m --match: Only encode files starting with this. (Only used if --directory is used)
         -t --threads: Number of threads to use to per video. Defaults to "${THREADS}"
         -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
+        -q --seq: Recode files sequentially. Defaults to false
     `)
 }
 
-async function createWorker(input: string, output: string) {
+function createWorker(input: string, output: string, totalFiles?: number) {
     const thread = new URL('thread.ts', import.meta.url).href;
-    console.log(thread);
     const worker = new Worker(thread, { type: 'module' });
     const passFile = `${pathParse(input).name}.log`;
 
     return new Promise((resolve) => {
-        worker.postMessage({ input, output, abr: args.abr || AUDIO_BITRATE, vbr: args.vbr || VIDEO_BITRATE, codec: CODEC, passFile, threads: args.threads || THREADS });
-        worker.addEventListener('message', (evt) => {
-            resolve(true);
-        })
+        let threads = args.seq ? Math.ceil(args.threads / totalFiles) : args.threads
+        worker.postMessage({ input, output, abr: args.abr, vbr: args.vbr, codec: CODEC, passFile, threads });
+        worker.addEventListener('message', (_) => resolve(true));
     })
 }
 
@@ -92,21 +100,29 @@ async function main() {
 
                 console.log(typeof input);
                 console.log(`processing ${name}${ext}`);
-                queue.push(createWorker(input, output));
+                if (!args.seq) {
+                    queue.push(createWorker(input, output));
+                } else {
+                    await createWorker(input, output);
+                }
             }
         }
     } else {
         for await (const file of args.file) {
             const { name, ext } = pathParse(file);
             const input = resolve(Deno.cwd(), file);
-            const output = resolve(Deno.cwd(), (args.output[i] || `${name}-recode${ext}`));
+            const output = resolve(Deno.cwd(), args.output[i]);
             console.log(`processing ${name}${ext}`);
-            queue.push(createWorker(input, output));
+            if (!args.seq) {
+                queue.push(createWorker(input, output));
+            } else {
+                await createWorker(input, output);
+            }
             i++;
         }
     }
 
-    await Promise.all(queue);
+    if (!args.seq) await Promise.all(queue);
 
     console.log('Finished Encoding');
 }

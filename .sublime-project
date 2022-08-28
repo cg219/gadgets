@@ -1,0 +1,22 @@
+{
+    "settings": {
+        "LSP": {
+            "typescript": {
+                "enabled": false
+            },
+            "deno": {
+                "command": [ "deno", "lsp"],
+                "enabled": true,
+                "languages": [
+                    {
+                        "languageId": "typescript",
+                        "scopes": ["source.ts"],
+                        "syntaxes": [
+                            "Packages/TypeScript/TypeScript.tmLanguage"
+                        ]
+                    }
+                ],
+            }
+        }
+    }
+}
