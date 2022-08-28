@@ -61,7 +61,7 @@ function createWorker(input: string, output: string, totalFiles?: number) {
     const passFile = `${pathParse(input).name}.log`;
 
     return new Promise((resolve) => {
-        let threads = args.seq ? Math.ceil(args.threads / totalFiles) : args.threads
+        let threads = args.seq ? args.threads : Math.ceil(args.threads / totalFiles);
         worker.postMessage({ input, output, abr: args.abr, vbr: args.vbr, codec: CODEC, passFile, threads });
         worker.addEventListener('message', (_) => resolve(true));
     })
@@ -101,9 +101,9 @@ async function main() {
                 console.log(typeof input);
                 console.log(`processing ${name}${ext}`);
                 if (!args.seq) {
-                    queue.push(createWorker(input, output));
+                    queue.push(createWorker(input, output, args.file.length));
                 } else {
-                    await createWorker(input, output, args.file.length);
+                    await createWorker(input, output);
                 }
             }
         }
@@ -114,9 +114,9 @@ async function main() {
             const output = resolve(Deno.cwd(), args.output[i]);
             console.log(`processing ${name}${ext}`);
             if (!args.seq) {
-                queue.push(createWorker(input, output));
+                queue.push(createWorker(input, output, args.file.length));
             } else {
-                await createWorker(input, output, args.file.length);
+                await createWorker(input, output);
             }
             i++;
         }
