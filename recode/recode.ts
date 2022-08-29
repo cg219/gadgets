@@ -7,7 +7,7 @@ const AUDIO_BITRATE = '128k';
 
 const args = parse(Deno.args, {
     collect: ['file', 'output'],
-    string: ['abr', 'vbr', 'match', 'directory'],
+    string: ['abr', 'vbr', 'match', 'directory', 'list'],
     boolean: ['seq'],
     default: {
         'q': false,
@@ -24,7 +24,8 @@ const args = parse(Deno.args, {
         'm': 'match',
         'v': 'vbr',
         't': 'threads',
-        'q': 'seq'
+        'q': 'seq',
+        'l': 'list'
     }
 });
 const CODEC = 'libx265';
@@ -40,18 +41,19 @@ function help() {
 
         Required:
 
-        -f --file: File to encode (Only required if --directory isn't used)
-        -o --output: Filename to save encoded file (Only required if --directory isn't used)
+        -f --file: File to encode (Only required if --directory or --list isn't used)
+        -o --output: Filename to save encoded file (Only required if --directory or --list isn't used)
 
         Options:
 
         -a --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
         -d --directory: Directory of files to encode
         -h --help: Print help menu
+        -1 --list: Provide a JSON file that has a list of inputs and outputs
         -m --match: Only encode files starting with this. (Only used if --directory is used)
+        -q --seq: Recode files sequentially. Defaults to false
         -t --threads: Number of threads to use to per video. Defaults to "${THREADS}"
         -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
-        -q --seq: Recode files sequentially. Defaults to false
     `)
 }
 
@@ -72,12 +74,12 @@ async function main() {
 
     if (args.help || Object.values(args).length <= 1) return help();
 
-    if (!args.file && !args.directory) {
-        console.log('Missing file or directory to re-encode');
+    if (!args.file && !args.directory && !args.list) {
+        console.log('Missing file or directory or list to re-encode');
         return;
     }
 
-    if (!args.output && !args.directory) {
+    if (!args.output && !args.directory && !args.list) {
         console.log('Missing output file');
         return;
     }
@@ -87,7 +89,18 @@ async function main() {
         return;
     }
 
+    if (args.file && args.list) {
+        console.log(`--file and --list are both set. Choose only one.`);
+        return;
+    }
+
+    if (args.directory && args.list) {
+        console.log(`--directory and --list are both set. Choose only one.`);
+        return;
+    }
+
     const isDirectory = args.directory ? true : false;
+    const isList = args.list ? true : false;
     let i = 0;
 
     if (isDirectory) {
@@ -105,6 +118,28 @@ async function main() {
                 } else {
                     await createWorker(input, output);
                 }
+            }
+        }
+    } else if (isList) {
+        const res = await fetch(`file://${resolve(Deno.cwd(), args.list)}`);
+        const json = await res.json();
+        const iterable = {
+            async *[Symbol.asyncIterator]() {
+                for (const val of Object.entries(json)) {
+                    yield val
+                }
+            }
+        }
+
+        for await (const [file, fileOutput] of iterable) {
+            const { name, ext } = pathParse(file);
+            const input = resolve(Deno.cwd(), file);
+            const output = resolve(Deno.cwd(), fileOutput);
+            console.log(`processing ${name}${ext}`);
+            if (!args.seq) {
+                queue.push(createWorker(input, output, Object.values(json).length));
+            } else {
+                await createWorker(input, output);
             }
         }
     } else {
