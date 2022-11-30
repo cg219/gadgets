@@ -2,7 +2,13 @@
     "settings": {
         "LSP": {
             "typescript": {
-                "enabled": false
+                "enabled": false,
+                "languages": [
+                    {
+                        "languageId": "typescript",
+                        "scopes": ["source.ts"]
+                    }
+                ]
             },
             "deno": {
                 "command": [ "deno", "lsp"],
