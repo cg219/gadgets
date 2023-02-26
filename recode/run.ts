@@ -1,4 +1,4 @@
-import { extname } from 'https://deno.land/std@0.153.0/path/mod.ts';
+import { extname } from 'https://deno.land/std@0.178.0/path/mod.ts';
 
 interface RunnerOptions {
     input: string
@@ -14,7 +14,6 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     const firstPass = [];
     const secondPass = [];
 
-    firstPass.push('ffmpeg');
     firstPass.push('-y');
     firstPass.push('-i');
     firstPass.push(input);
@@ -33,7 +32,6 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     firstPass.push('null');
     firstPass.push('/dev/null/');
 
-    secondPass.push('ffmpeg');
     secondPass.push('-i');
     secondPass.push(input);
     secondPass.push('-map');
@@ -56,16 +54,21 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     secondPass.push(threads)
     secondPass.push(output);
 
-    const fpid = Deno.run({ cmd: firstPass });
-    const fpstatus = await fpid.status();
+    const firstCommand = new Deno.Command('ffmpeg', { args: firstPass });
+    const secondCommand = new Deno.Command('ffmpeg', { args: secondPass });
+    const firstProcess = await firstCommand.spawn();
 
-    if (!fpstatus.success) {
+    await firstProcess.output();
+    const firstProcessStatus = await firstProcess.status;
+
+    if (!firstProcessStatus.success) {
         console.log('Error during First Pass');
         return;
     }
+    const secondProcess = await secondCommand.spawn();
 
-    const spid = Deno.run({ cmd: secondPass });
-    await spid.status();
+    await secondProcess.output();
+    await secondProcess.status;
 }
 
 export { run };

@@ -1,128 +1,80 @@
-import { parse } from 'https://deno.land/std@0.153.0/flags/mod.ts';
-import { extname, join, isAbsolute, resolve, parse as pathParse } from 'https://deno.land/std@0.153.0/path/mod.ts';
+import { extname, resolve, parse as pathParse } from 'https://deno.land/std@0.178.0/path/mod.ts';
+import { Command } from 'https://deno.land/x/cliffy@v0.25.7/mod.ts';
+import { JSONList, RecodeOptions } from './types.ts';
 
-const THREADS = '4';
+const THREADS = 4;
 const VIDEO_BITRATE = '1400k';
 const AUDIO_BITRATE = '128k';
-
-const args = parse(Deno.args, {
-    collect: ['file', 'output'],
-    string: ['abr', 'vbr', 'match', 'directory', 'list'],
-    boolean: ['seq'],
-    default: {
-        'q': false,
-        't': THREADS,
-        'a': AUDIO_BITRATE,
-        'v': VIDEO_BITRATE
-    },
-    alias: {
-        'f': 'file',
-        'o': 'output',
-        'a': 'abr',
-        'd': 'directory',
-        'h': 'help',
-        'm': 'match',
-        'v': 'vbr',
-        't': 'threads',
-        'q': 'seq',
-        'l': 'list'
-    }
-});
 const CODEC = 'libx265';
-const AUDIO_CODEC = 'aac';
+// const AUDIO_CODEC = 'aac';
 const acceptedTypes = ['.mp4', '.mov', '.mkv', '.mpeg', '.mpg'];
 
-function help() {
-    console.log(`
-        recode Help Menu
-        ----------------
-
-        Re-encode video to a lower bitrate (H.265)
-
-        Required:
-
-        -f --file: File to encode (Only required if --directory or --list isn't used)
-        -o --output: Filename to save encoded file (Only required if --directory or --list isn't used)
-
-        Options:
-
-        -a --abr: Audio Bitrate to encode to. Defaults to "${AUDIO_BITRATE}"
-        -d --directory: Directory of files to encode
-        -h --help: Print help menu
-        -1 --list: Provide a JSON file that has a list of inputs and outputs
-        -m --match: Only encode files starting with this. (Only used if --directory is used)
-        -q --seq: Recode files sequentially. Defaults to false
-        -t --threads: Number of threads to use to per video. Defaults to "${THREADS}"
-        -v --vbr: Video Bitrate to encode to. Defaults to "${VIDEO_BITRATE}"
-    `)
+if (import.meta.main) {
+    try {
+        await new Command()
+            .name('recode')
+            .version('1.2.0')
+            .description('Re-encode video to a lower bitrate (H.265)')
+            .usage('[options]')
+            .option('-f, --file <file:file>', 'File to encode', { collect: true })
+            .option('-o, --output <output:file>', 'Filename to save encoded file', { collect: true })
+            .option('-a, --abr [abr:string]', 'Audio Bitrate to encode to', { default: AUDIO_BITRATE })
+            .option('-v, --vbr [vbr:string]', 'Video Bitrate to encode to', { default: VIDEO_BITRATE })
+            .option('-d, --directory [directory:boolean]', 'Sets --file to a directory', { default: false, conflicts: ['output'] })
+            .option('-l, --list [list:boolean]', 'Sets --file to a JSON file of file inputs', { default: false })
+            .option('-m, --match [match:string]', 'Only encode files starting with this')
+            .option('-q, --sequence [sequence:boolean]', 'Recode files sequentially', { default: false })
+            .option('-t, --threads [threads:integer]', 'Number of threads to use to per video', { default: THREADS })
+            .action(recode)
+            .parse(Deno.args)
+        } catch(e) {
+            console.error(e);
+            Deno.exit(1);
+        }
 }
 
-function createWorker(input: string, output: string, totalFiles?: number) {
+function createWorker(input: string, output: string, options: RecodeOptions, totalFiles?: number) {
     const thread = new URL('thread.ts', import.meta.url).href;
     const worker = new Worker(thread, { type: 'module' });
     const passFile = `${pathParse(input).name}.log`;
 
     return new Promise((resolve) => {
-        let threads = args.seq ? args.threads : Math.ceil(args.threads / totalFiles);
-        worker.postMessage({ input, output, abr: args.abr, vbr: args.vbr, codec: CODEC, passFile, threads });
+        const threads = options.sequence ? options.threads : Math.ceil(options.threads / (totalFiles ?? options.file.length));
+        worker.postMessage({ input, output, abr: options.abr, vbr: options.vbr, codec: CODEC, passFile, threads });
         worker.addEventListener('message', (_) => resolve(true));
     })
 }
 
-async function main() {
+// deno-lint-ignore no-explicit-any
+async function recode(options: any) {
+    const isDirectory = options.directory;
+    const isList = options.list;
     const queue = [];
-
-    if (args.help || Object.values(args).length <= 1) return help();
-
-    if (!args.file && !args.directory && !args.list) {
-        console.log('Missing file or directory or list to re-encode');
-        return;
-    }
-
-    if (!args.output && !args.directory && !args.list) {
-        console.log('Missing output file');
-        return;
-    }
-
-    if (args.file && args.directory) {
-        console.log(`--file and --directory are both set. Choose only one.`);
-        return;
-    }
-
-    if (args.file && args.list) {
-        console.log(`--file and --list are both set. Choose only one.`);
-        return;
-    }
-
-    if (args.directory && args.list) {
-        console.log(`--directory and --list are both set. Choose only one.`);
-        return;
-    }
-
-    const isDirectory = args.directory ? true : false;
-    const isList = args.list ? true : false;
-    let i = 0;
 
     if (isDirectory) {
         console.log('Running on Folder')
-        for await (const file of Deno.readDir(resolve(Deno.cwd(), args.directory))) {
-            if (file.isFile && acceptedTypes.includes(extname(file.name)) && (args.match ? file.name.startsWith(args.match) : true)) {
+        if (options.file.length > 1) throw new Error('If file is a directory, only one file path is required');
+
+        for await (const file of Deno.readDir(resolve(Deno.cwd(), options.file[0]))) {
+            if (file.isFile && acceptedTypes.includes(extname(file.name)) && (options.match ? file.name.startsWith(options.match) : true)) {
                 const { name, ext } = pathParse(file.name);
-                const input = resolve(Deno.cwd(), args.directory, file.name);
-                const output = resolve(Deno.cwd(), args.directory, `${name}-recode${ext}`);
+                const input = resolve(Deno.cwd(), options.file[0], file.name);
+                const output = resolve(Deno.cwd(), options.file[0], `${name}-recode${ext}`);
 
                 console.log(typeof input);
                 console.log(`processing ${name}${ext}`);
-                if (!args.seq) {
-                    queue.push(createWorker(input, output, args.file.length));
+                if (!options.sequence) {
+                    queue.push(createWorker(input, output, options));
                 } else {
-                    await createWorker(input, output);
+                    await createWorker(input, output, options);
                 }
             }
         }
     } else if (isList) {
-        const res = await fetch(`file://${resolve(Deno.cwd(), args.list)}`);
-        const json = await res.json();
+        if (options.file.length > 1) throw new Error('If file is a JSON list, only one file path is required');
+
+        const res = await fetch(`file://${resolve(Deno.cwd(), options.file[0])}`);
+        const json: JSONList = await res.json();
         const iterable = {
             async *[Symbol.asyncIterator]() {
                 for (const val of Object.entries(json)) {
@@ -135,31 +87,35 @@ async function main() {
             const { name, ext } = pathParse(file);
             const input = resolve(Deno.cwd(), file);
             const output = resolve(Deno.cwd(), fileOutput);
+
             console.log(`processing ${name}${ext}`);
-            if (!args.seq) {
-                queue.push(createWorker(input, output, Object.values(json).length));
+
+            if (!options.sequence) {
+                queue.push(createWorker(input, output, options, Object.values(json).length));
             } else {
-                await createWorker(input, output);
+                await createWorker(input, output, options);
             }
         }
     } else {
-        for await (const file of args.file) {
+        let i = 0;
+
+        if (options.file.length != options.output.length) {
+            throw new Error('File inputs and outputs are not even. Make sure there is an output for every input file');
+        }
+
+        for await (const file of options.file) {
             const { name, ext } = pathParse(file);
             const input = resolve(Deno.cwd(), file);
-            const output = resolve(Deno.cwd(), args.output[i]);
+            const output = resolve(Deno.cwd(), options.output[i]);
             console.log(`processing ${name}${ext}`);
-            if (!args.seq) {
-                queue.push(createWorker(input, output, args.file.length));
+            if (!options.sequence) {
+                queue.push(createWorker(input, output, options));
             } else {
-                await createWorker(input, output);
+                await createWorker(input, output, options);
             }
             i++;
         }
     }
 
-    if (!args.seq) await Promise.all(queue);
-
-    console.log('Finished Encoding');
+    if (!options.sequence) await Promise.all(queue);
 }
-
-await main();
