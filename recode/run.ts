@@ -72,7 +72,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
 
     await progress.with(async () => {
         for (const pass of passes) {
-            const passRun = $.raw`ffmpeg ${pass.join(' ')}`.quiet().stdout('piped').spawn();
+            const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
 
             for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
                 if (passMap.get(pass) == 'first pass') {
