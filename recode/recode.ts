@@ -1,6 +1,8 @@
-import { extname, resolve, parse as pathParse } from 'https://deno.land/std@0.178.0/path/mod.ts';
+import { extname, resolve, parse as pathParse } from 'https://deno.land/std@0.180.0/path/mod.ts';
 import { Command } from 'https://deno.land/x/cliffy@v0.25.7/mod.ts';
 import { JSONList, RecodeOptions } from './types.ts';
+import { $ } from 'https://deno.land/x/dax@0.30.1/mod.ts';
+import { run } from './run.ts';
 
 const THREADS = 4;
 const VIDEO_BITRATE = '1400k';
@@ -33,16 +35,11 @@ if (import.meta.main) {
         }
 }
 
-function createWorker(input: string, output: string, options: RecodeOptions, totalFiles?: number) {
-    const thread = new URL('thread.ts', import.meta.url).href;
-    const worker = new Worker(thread, { type: 'module' });
+function executeRun(input: string, output: string, options: RecodeOptions, totalFiles?: number) {
     const passFile = `${pathParse(input).name}.log`;
+    const threads = options.sequence ? options.threads : Math.ceil(options.threads / (totalFiles ?? options.file.length));
 
-    return new Promise((resolve) => {
-        const threads = options.sequence ? options.threads : Math.ceil(options.threads / (totalFiles ?? options.file.length));
-        worker.postMessage({ input, output, abr: options.abr, vbr: options.vbr, codec: CODEC, passFile, threads });
-        worker.addEventListener('message', (_) => resolve(true));
-    })
+    return run({ input, output, abr: options.abr, vbr: options.vbr, codec: CODEC, passFile, threads });
 }
 
 // deno-lint-ignore no-explicit-any
@@ -52,67 +49,86 @@ async function recode(options: any) {
     const queue = [];
 
     if (isDirectory) {
-        console.log('Running on Folder')
         if (options.file.length > 1) throw new Error('If file is a directory, only one file path is required');
+        $.logStep(`recoding from directory`);
 
-        for await (const file of Deno.readDir(resolve(Deno.cwd(), options.file[0]))) {
-            if (file.isFile && acceptedTypes.includes(extname(file.name)) && (options.match ? file.name.startsWith(options.match) : true)) {
-                const { name, ext } = pathParse(file.name);
-                const input = resolve(Deno.cwd(), options.file[0], file.name);
-                const output = resolve(Deno.cwd(), options.file[0], `${name}-recode${ext}`);
+        const progress = $.progress('');
 
-                console.log(typeof input);
-                console.log(`processing ${name}${ext}`);
-                if (!options.sequence) {
-                    queue.push(createWorker(input, output, options));
-                } else {
-                    await createWorker(input, output, options);
+        progress.prefix('overall processing');
+
+        await progress.with(async () => {
+            for await (const file of Deno.readDir(resolve(Deno.cwd(), options.file[0]))) {
+                if (file.isFile && acceptedTypes.includes(extname(file.name)) && (options.match ? file.name.startsWith(options.match) : true)) {
+                    const { name, ext } = pathParse(file.name);
+                    const input = resolve(Deno.cwd(), options.file[0], file.name);
+                    const output = resolve(Deno.cwd(), options.file[0], `${name}-recode${ext}`);
+
+                    $.logStep(`recoding ${input}`);
+
+                    if (!options.sequence) {
+                        queue.push(executeRun(input, output, options));
+                    } else {
+                        await executeRun(input, output, options);
+                    }
                 }
             }
-        }
+        });
     } else if (isList) {
         if (options.file.length > 1) throw new Error('If file is a JSON list, only one file path is required');
 
+        $.logStep(`recoding from list`);
         const res = await fetch(`file://${resolve(Deno.cwd(), options.file[0])}`);
         const json: JSONList = await res.json();
         const iterable = {
             async *[Symbol.asyncIterator]() {
                 for (const val of Object.entries(json)) {
-                    yield val
+                    yield val;
                 }
             }
         }
 
-        for await (const [file, fileOutput] of iterable) {
-            const { name, ext } = pathParse(file);
-            const input = resolve(Deno.cwd(), file);
-            const output = resolve(Deno.cwd(), fileOutput);
+        const progress = $.progress('')
 
-            console.log(`processing ${name}${ext}`);
+        progress.prefix('recoding progress');
 
-            if (!options.sequence) {
-                queue.push(createWorker(input, output, options, Object.values(json).length));
-            } else {
-                await createWorker(input, output, options);
-            }
+        if (options.sequence) {
+            progress.length(Object.keys(json).length);
+            progress.message(`${Object.keys(json).length} files`);
         }
+
+        await progress.with(async () => {
+            for await (const [file, fileOutput] of iterable) {
+                const input = resolve(Deno.cwd(), file);
+                const output = resolve(Deno.cwd(), fileOutput);
+
+                $.logStep(`recoding ${input}`);
+
+                if (!options.sequence) {
+                    queue.push(executeRun(input, output, options, Object.values(json).length));
+                    progress.finish();
+                } else {
+                    await executeRun(input, output, options);
+                    progress.increment();
+                }
+            }
+        });
     } else {
+        if (options.file.length != options.output.length) throw new Error('File inputs and outputs are not even. Make sure there is an output for every input file');
+
         let i = 0;
 
-        if (options.file.length != options.output.length) {
-            throw new Error('File inputs and outputs are not even. Make sure there is an output for every input file');
-        }
-
         for await (const file of options.file) {
-            const { name, ext } = pathParse(file);
             const input = resolve(Deno.cwd(), file);
             const output = resolve(Deno.cwd(), options.output[i]);
-            console.log(`processing ${name}${ext}`);
+
+            $.logStep(`recoding ${input}`);
+
             if (!options.sequence) {
-                queue.push(createWorker(input, output, options));
+                queue.push(executeRun(input, output, options));
             } else {
-                await createWorker(input, output, options);
+                await executeRun(input, output, options);
             }
+
             i++;
         }
     }
