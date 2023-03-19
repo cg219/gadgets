@@ -1,4 +1,5 @@
-import { extname } from 'https://deno.land/std@0.178.0/path/mod.ts';
+import { $ } from 'https://deno.land/x/dax@0.30.1/mod.ts';
+import { getProgress } from './progress.ts';
 
 interface RunnerOptions {
     input: string
@@ -7,12 +8,12 @@ interface RunnerOptions {
     vbr: string
     codec: string
     passFile: string
-    threads: string
+    threads: number
 }
 
 async function run({ input, output, abr, vbr, codec, passFile, threads }: RunnerOptions) {
-    const firstPass = [];
-    const secondPass = [];
+    const firstPass:(string| number)[] = [];
+    const secondPass:(string| number)[] = [];
 
     firstPass.push('-y');
     firstPass.push('-i');
@@ -27,11 +28,14 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     firstPass.push(`stats=${passFile}`);
     firstPass.push('-threads');
     firstPass.push(threads);
+    firstPass.push('-progress');
+    firstPass.push('pipe:1');
     firstPass.push('-an');
     firstPass.push('-f');
     firstPass.push('null');
     firstPass.push('/dev/null/');
 
+    secondPass.push('-y');
     secondPass.push('-i');
     secondPass.push(input);
     secondPass.push('-map');
@@ -51,24 +55,36 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     secondPass.push('-c:s');
     secondPass.push('copy');
     secondPass.push('-threads');
-    secondPass.push(threads)
+    secondPass.push(threads);
+    secondPass.push('-progress');
+    secondPass.push('pipe:1');
     secondPass.push(output);
 
-    const firstCommand = new Deno.Command('ffmpeg', { args: firstPass });
-    const secondCommand = new Deno.Command('ffmpeg', { args: secondPass });
-    const firstProcess = await firstCommand.spawn();
+    const duration = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${input}`.text();
+    const passes = [firstPass, secondPass];
+    const passMap = new Map();
+    const progress = $.progress('', { length: 100 });
 
-    await firstProcess.output();
-    const firstProcessStatus = await firstProcess.status;
+    passMap.set(firstPass, 'first pass');
+    passMap.set(secondPass, 'second pass');
+    progress.prefix(`processing`);
+    progress.message(input);
 
-    if (!firstProcessStatus.success) {
-        console.log('Error during First Pass');
-        return;
-    }
-    const secondProcess = await secondCommand.spawn();
+    await progress.with(async () => {
+        for (const pass of passes) {
+            const passRun = $.raw`ffmpeg ${pass.join(' ')}`.quiet().stdout('piped').spawn();
 
-    await secondProcess.output();
-    await secondProcess.status;
+            for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
+                if (passMap.get(pass) == 'first pass') {
+                    progress.position(Math.round(current * 100 * .5));
+                } else {
+                    progress.position(Math.round(50 + (current * 100 * .5)));
+                }
+            }
+
+            await passRun;
+        }
+    })
 }
 
 export { run };
