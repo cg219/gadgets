@@ -15,9 +15,10 @@ export type RecodeOptions = {
     abr: string;
     directory: boolean;
     list: boolean;
-    match: boolean;
+    match: string;
     threads: number;
-    sequence: boolean
+    sequence: boolean;
+    cimode: boolean;
 }
 
 export type JSONList = {

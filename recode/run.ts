@@ -8,10 +8,11 @@ interface RunnerOptions {
     vbr: string
     codec: string
     passFile: string
-    threads: number
+    threads: number,
+    ci: boolean
 }
 
-async function run({ input, output, abr, vbr, codec, passFile, threads }: RunnerOptions) {
+async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: RunnerOptions) {
     const firstPass:(string| number)[] = [];
     const secondPass:(string| number)[] = [];
 
@@ -63,28 +64,46 @@ async function run({ input, output, abr, vbr, codec, passFile, threads }: Runner
     const duration = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${input}`.text();
     const passes = [firstPass, secondPass];
     const passMap = new Map();
-    const progress = $.progress('', { length: 100 });
 
     passMap.set(firstPass, 'first pass');
     passMap.set(secondPass, 'second pass');
-    progress.prefix(`processing`);
-    progress.message(input);
 
-    await progress.with(async () => {
+    if (!ci) {
+        const progress = $.progress('', { length: 100 });
+
+        progress.prefix(`processing`);
+        progress.message(input);
+
+        await progress.with(async () => {
+            for (const pass of passes) {
+                const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
+
+                for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
+                    if (passMap.get(pass) == 'first pass') {
+                        progress.position(Math.round(current * 100 * .5));
+                    } else {
+                        progress.position(Math.round(50 + (current * 100 * .5)));
+                    }
+                }
+
+                await passRun;
+            }
+        })
+    } else {
         for (const pass of passes) {
             const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
 
             for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
                 if (passMap.get(pass) == 'first pass') {
-                    progress.position(Math.round(current * 100 * .5));
+                    console.log(Math.round(current * 100 * .5))
                 } else {
-                    progress.position(Math.round(50 + (current * 100 * .5)));
+                    console.log(Math.round(50 + (current * 100 * .5)));
                 }
             }
 
             await passRun;
         }
-    })
+    }
 }
 
 export { run };
