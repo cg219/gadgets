@@ -1,5 +1,5 @@
-import { extname, resolve, parse as pathParse } from './vendor/deno.land/std@0.180.0/path/mod.ts';
-import { Command } from './vendor/deno.land/x/cliffy@v0.25.7/mod.ts';
+import { extname, resolve, parse as pathParse } from 'https://deno.land/std@0.180.0/path/mod.ts';
+import { Command } from 'https://deno.land/x/cliffy@v0.25.7/mod.ts';
 import { JSONList, RecodeOptions } from './types.ts';
 import { $ } from '@david/dax';
 import { run } from './run.ts';
