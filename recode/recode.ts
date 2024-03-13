@@ -1,7 +1,7 @@
-import { extname, resolve, parse as pathParse } from 'https://deno.land/std@0.180.0/path/mod.ts';
+import { extname, resolve, parse as pathParse } from '@std/path';
 import { Command } from 'https://deno.land/x/cliffy@v0.25.7/mod.ts';
 import { JSONList, RecodeOptions } from './types.ts';
-import { $ } from 'https://deno.land/x/dax@0.39.2/mod.ts';
+import { $ } from '@david/dax';
 import { run } from './run.ts';
 
 const THREADS = 4;

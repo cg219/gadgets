@@ -1,4 +1,4 @@
-import { $ } from 'https://deno.land/x/dax@0.39.2/mod.ts';
+import { $ } from '@david/dax';
 import { getProgress } from './progress.ts';
 
 interface RunnerOptions {
