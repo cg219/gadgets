@@ -11,7 +11,7 @@
   },
   "imports": {
     "@david/dax": "jsr:@david/dax@^0.39.2",
-    "@std/path": "jsr:@std/path@^0.219.1"
+    "@std/path": "jsr:@std/path@^0.219.1",
+    "https://deno.land/": "./vendor/deno.land/",
   },
-  "importMap": "./vendor/import_map.json"
 }
