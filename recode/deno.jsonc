@@ -9,5 +9,6 @@
     "build:linux": "deno compile --allow-read --allow-run --allow-write --target x86_64-unknown-linux-gnu --output bin/recode recode.ts",
     "build:win": "deno compile --allow-read --allow-run --allow-write --target x86_64-pc-windows-msvc --output bin/recode recode.ts"
   },
-  "importMap": "./vendor/import_map.json"
+  "importMap": "./vendor/import_map.json",
+  "imports": { "@david/dax": "jsr:@david/dax@^0.39.2" }
 }
