@@ -1,5 +1,7 @@
 import { $ } from '@david/dax';
 import { getProgress } from './progress.ts';
+import { ensureDir } from "@std/fs/ensure-dir";
+import { dirname } from "@std/path/dirname";
 
 interface RunnerOptions {
     input: string
@@ -68,6 +70,8 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
     passMap.set(firstPass, 'first pass');
     passMap.set(secondPass, 'second pass');
 
+    await ensureDir(dirname(output))
+
     if (!ci) {
         const progress = $.progress('', { length: 100 });
 
@@ -78,7 +82,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
             for (const pass of passes) {
                 const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
 
-                for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
+                for await (const current of getProgress(passRun.stdout(), Number(duration))) {
                     if (passMap.get(pass) == 'first pass') {
                         progress.position(Math.round(current * 100 * .5));
                     } else {
@@ -93,7 +97,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
         for (const pass of passes) {
             const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
 
-            for await (const current of await getProgress(passRun.stdout(), Number(duration))) {
+            for await (const current of getProgress(passRun.stdout(), Number(duration))) {
                 if (passMap.get(pass) == 'first pass') {
                     console.log(Math.round(current * 100 * .5))
                 } else {

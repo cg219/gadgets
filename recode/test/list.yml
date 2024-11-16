@@ -1,0 +1,15 @@
+base:
+  source: ./test/video
+  target: ./output
+
+settings:
+  abr: 100k
+  vbr: 1600k
+  threads: 16
+  sequence: true
+
+list:
+  - source: sample.mp4
+    target: sample.mkv
+  - source: sample.mp4
+    target: sample2.mkv

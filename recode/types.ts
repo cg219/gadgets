@@ -21,6 +21,19 @@ export type RecodeOptions = {
     cimode: boolean;
 }
 
-export type JSONList = {
-    [key: string]: string;
+export type YmlList  = {
+    base: {
+        source?: string;
+        target?: string;
+    }
+    settings: {
+        abr?: string;
+        vbr?: string;
+        threads?: number;
+        sequence?: boolean;
+    }
+    list: [{
+        source: string;
+        target: string;
+    }]
 }

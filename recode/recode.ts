@@ -1,6 +1,7 @@
 import { extname, resolve, parse as pathParse } from '@std/path';
+import { parse as parseYaml } from '@std/yaml';
 import { Command } from '@cliffy/command';
-import type { JSONList, RecodeOptions } from './types.ts';
+import type { RecodeOptions, YmlList } from './types.ts';
 import { $ } from '@david/dax';
 import { run } from './run.ts';
 
@@ -89,11 +90,17 @@ async function recode(options: any) {
         if (options.file.length > 1) throw new Error('If file is a JSON list, only one file path is required');
 
         $.logStep(`recoding from list`);
-        const res = await fetch(`file://${resolve(Deno.cwd(), options.file[0])}`);
-        const json: JSONList = await res.json();
+        const res = await Deno.readTextFile(resolve(Deno.cwd(), options.file[0]))
+        const yaml = parseYaml(res, { schema: "core" }) as YmlList
+
+        if (options.abr == "128k" && yaml.settings.abr) options.abr = yaml.settings.abr
+        if (options.vbr == "1400k" && yaml.settings.vbr) options.vbr = yaml.settings.vbr
+        if (!options.sequence && yaml.settings.sequence) options.sequence = yaml.settings.sequence
+        if (options.threads == 4 && yaml.settings.threads) options.threads = yaml.settings.threads
+
         const iterable = {
             async *[Symbol.asyncIterator]() {
-                for (const val of Object.entries(json)) {
+                for (const val of Object.entries(yaml.list)) {
                     yield val;
                 }
             }
@@ -105,19 +112,19 @@ async function recode(options: any) {
             progress.prefix('recoding progress');
 
             if (options.sequence) {
-                progress.length(Object.keys(json).length);
-                progress.message(`${Object.keys(json).length} files`);
+                progress.length(yaml.list.length);
+                progress.message(`${yaml.list.length} files`);
             }
 
             await progress.with(async () => {
-                for await (const [file, fileOutput] of iterable) {
-                    const input = resolve(Deno.cwd(), file);
-                    const output = resolve(Deno.cwd(), fileOutput);
+                for await (const [_, value] of iterable) {
+                    const input = resolve(yaml.base.source ?? Deno.cwd(), value.source);
+                    const output = resolve(yaml.base.target ?? Deno.cwd(), value.target);
 
                     $.logStep(`recoding ${input}`);
 
                     if (!options.sequence) {
-                        queue.push(executeRun(input, output, options, Object.values(json).length));
+                        queue.push(executeRun(input, output, options, yaml.list.length));
                         progress.finish();
                     } else {
                         await executeRun(input, output, options);
@@ -126,14 +133,14 @@ async function recode(options: any) {
                 }
             });
         } else {
-            for await (const [file, fileOutput] of iterable) {
-                const input = resolve(Deno.cwd(), file);
-                const output = resolve(Deno.cwd(), fileOutput);
+            for await (const [_, value] of iterable) {
+                const input = resolve(Deno.cwd(), value.source);
+                const output = resolve(Deno.cwd(), value.target);
 
                 $.logStep(`recoding ${input}`);
 
                 if (!options.sequence) {
-                    queue.push(executeRun(input, output, options, Object.values(json).length));
+                    queue.push(executeRun(input, output, options, yaml.list.length));
                 } else {
                     await executeRun(input, output, options);
                 }
