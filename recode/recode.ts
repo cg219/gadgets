@@ -1,6 +1,6 @@
 import { extname, resolve, parse as pathParse } from '@std/path';
-import { Command } from 'https://deno.land/x/cliffy@v0.25.7/mod.ts';
-import { JSONList, RecodeOptions } from './types.ts';
+import { Command } from '@cliffy/command';
+import type { JSONList, RecodeOptions } from './types.ts';
 import { $ } from '@david/dax';
 import { run } from './run.ts';
 
@@ -140,6 +140,7 @@ async function recode(options: any) {
             }
         }
     } else {
+        if (!options.file) return;
         if (options.file.length != options.output.length) throw new Error('File inputs and outputs are not even. Make sure there is an output for every input file');
 
         let i = 0;
