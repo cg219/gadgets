@@ -68,7 +68,8 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
         stderr: "piped",
         args: ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input]
     });
-    const duration = await durcmd.output()
+    const durout = await durcmd.output()
+    const duration = new TextDecoder().decode(durout.stdout)
     const passes = [firstPass, secondPass];
     const passMap = new Map();
 
@@ -100,7 +101,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
                     }
                 }
 
-                await passRun;
+                await passRun.status;
             }
         })
     } else {
@@ -120,7 +121,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
                 }
             }
 
-            await passRun;
+            await passRun.status;
         }
     }
 }
