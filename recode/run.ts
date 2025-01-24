@@ -15,8 +15,8 @@ interface RunnerOptions {
 }
 
 async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: RunnerOptions) {
-    const firstPass:(string| number)[] = [];
-    const secondPass:(string| number)[] = [];
+    const firstPass:string[] = [];
+    const secondPass:string[] = [];
 
     firstPass.push('-y');
     firstPass.push('-i');
@@ -30,7 +30,7 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
     firstPass.push('-x265-params');
     firstPass.push(`stats=${passFile}`);
     firstPass.push('-threads');
-    firstPass.push(threads);
+    firstPass.push(threads.toString());
     firstPass.push('-progress');
     firstPass.push('pipe:1');
     firstPass.push('-an');
@@ -58,12 +58,17 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
     secondPass.push('-c:s');
     secondPass.push('copy');
     secondPass.push('-threads');
-    secondPass.push(threads);
+    secondPass.push(threads.toString());
     secondPass.push('-progress');
     secondPass.push('pipe:1');
     secondPass.push(output);
 
-    const duration = await $`ffprobe -v error -show_entries format=duration -of default=noprint_wrappers=1:nokey=1 ${input}`.text();
+    const durcmd = new Deno.Command("ffprobe", {
+        stdout: "piped",
+        stderr: "piped",
+        args: ["-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", input]
+    });
+    const duration = await durcmd.output()
     const passes = [firstPass, secondPass];
     const passMap = new Map();
 
@@ -80,9 +85,14 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
 
         await progress.with(async () => {
             for (const pass of passes) {
-                const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
+                const cmd = new Deno.Command("ffmpeg", {
+                    stdout: "piped",
+                    stderr: "piped",
+                    args: pass
+                });
+                const passRun = cmd.spawn()
 
-                for await (const current of getProgress(passRun.stdout(), Number(duration))) {
+                for await (const current of getProgress(passRun.stdout, Number(duration))) {
                     if (passMap.get(pass) == 'first pass') {
                         progress.position(Math.round(current * 100 * .5));
                     } else {
@@ -95,9 +105,14 @@ async function run({ input, output, abr, vbr, codec, passFile, threads, ci }: Ru
         })
     } else {
         for (const pass of passes) {
-            const passRun = $`ffmpeg ${pass}`.quiet().stdout('piped').spawn();
+            const cmd = new Deno.Command("ffmpeg", {
+                stdout: "piped",
+                stderr: "piped",
+                args: pass
+            });
+            const passRun = cmd.spawn()
 
-            for await (const current of getProgress(passRun.stdout(), Number(duration))) {
+            for await (const current of getProgress(passRun.stdout, Number(duration))) {
                 if (passMap.get(pass) == 'first pass') {
                     console.log(Math.round(current * 100 * .5))
                 } else {

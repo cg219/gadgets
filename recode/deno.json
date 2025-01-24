@@ -1,9 +1,9 @@
 {
   "name": "@mentegee/recode",
-  "version": "2.0.0",
+  "version": "2.0.1",
   "exports": "./recode.ts",
   "tasks": {
-    "build": "deno compile --allow-read --allow-run --allow-write --output bin/recode recode.ts",
+    "build": "deno compile --allow-read --allow-run --allow-write --allow-env --output bin/recode recode.ts",
     "build:arm": "deno compile --allow-read --allow-run --allow-write --target aarch64-apple-darwin --output bin/recode recode.ts",
     "build:mac": "deno compile --allow-read --allow-run --allow-write --target x86_64-apple-darwin --output bin/recode recode.ts",
     "build:linux": "deno compile --allow-read --allow-run --allow-write --target x86_64-unknown-linux-gnu --output bin/recode recode.ts",
